@@ -255,3 +255,67 @@ test("buildSentryTriage maps Sentry stacktrace frames to Cargo crates and setupA
   assert.equal(help.status, 0);
   assert.match(help.stdout, /FERRUM — Fast Multiplatform Rust Agent Protocol/);
 });
+
+test("Vast.ai Cloud Orchestrator & MCP Server ranks offers by Effective CPU Cores per Dollar and injects container-safe API watchdog", async () => {
+  const {
+    rankRustOffers,
+    buildVastOnstartScript,
+    parseSshEndpoint,
+    formatInstanceSummary,
+    MCP_TOOLS,
+  } = await import("../scripts/vast-cloud.mjs");
+
+  // 1. SSH URL & port parsing for Vast.ai proxy endpoints
+  assert.deepEqual(parseSshEndpoint("ssh://root@ssh5.vast.ai:41892"), {
+    userHost: "root@ssh5.vast.ai",
+    port: "41892",
+    sshUrl: "ssh://root@ssh5.vast.ai:41892",
+  });
+  assert.deepEqual(parseSshEndpoint("root@198.51.100.7:31022"), {
+    userHost: "root@198.51.100.7",
+    port: "31022",
+    sshUrl: "ssh://root@198.51.100.7:31022",
+  });
+
+  // 2. Offer ranking filters out low-CPU, low-RAM-per-core, and slow-disk traps, sorting by coresPerDollar
+  const rawOffers = [
+    // Trap 1: Expensive GPU with only 8 CPU cores (filtered out by minCores: 32)
+    { id: 101, cpu_cores_effective: 8, cpu_ram: 65536, dph_total: 1.5, disk_bw: 2000, reliability2: 0.995, gpu_name: "H100" },
+    // Trap 2: 32 cores but only 32 GB RAM (1 GB/core -> OOMs rustc/lld, filtered out by minRamPerCoreGb)
+    { id: 102, cpu_cores_effective: 32, cpu_ram: 32768, dph_total: 0.2, disk_bw: 1500, reliability2: 0.99, gpu_name: "RTX 3060" },
+    // Good offer A: 32 cores, 64 GB RAM, $0.32/hr -> 100 cores/$
+    { id: 103, cpu_cores_effective: 32, cpu_ram: 65536, dph_total: 0.32, disk_bw: 1800, reliability2: 0.992, gpu_name: "RTX 3090", cpu_name: "EPYC 7543" },
+    // Best offer B: 64 cores, 128 GB RAM, $0.40/hr -> 160 cores/$
+    { id: 104, cpu_cores_effective: 64, cpu_ram: 131072, dph_total: 0.40, disk_bw: 3200, reliability2: 0.998, gpu_name: "RTX 4090", cpu_name: "EPYC 9554" },
+  ];
+
+  const ranked = rankRustOffers(rawOffers, { minCores: 32, minRamGb: 64 });
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].id, 104);
+  assert.equal(ranked[0].coresPerDollar, 160);
+  assert.equal(ranked[0].recommendedZthreads, 16);
+  assert.equal(ranked[1].id, 103);
+  assert.equal(ranked[1].coresPerDollar, 100);
+  assert.equal(ranked[1].recommendedZthreads, 12);
+
+  // 3. Container-safe watchdog calls Vast.ai REST API PUT /instances/${CID}/ {"state":"stopped"}
+  const onstart = buildVastOnstartScript({ idleMins: 15 });
+  assert.match(onstart, /https:\/\/console\.vast\.ai\/api\/v0\/instances\/\$\{CID\}\//);
+  assert.match(onstart, /\{"state":"stopped"\}/);
+  assert.match(onstart, /IDLE_MINS=15/);
+
+  // 4. Instance formatter produces ready-to-run ferrum remote command
+  const summary = formatInstanceSummary({
+    id: 98765,
+    actual_status: "running",
+    cpu_cores_effective: 64,
+    cpu_ram: 131072,
+    gpu_name: "RTX 4090",
+    dph_total: 0.4,
+    ssh_host: "ssh5.vast.ai",
+    ssh_port: 41892,
+  });
+  assert.equal(summary.sshUrl, "ssh://root@ssh5.vast.ai:41892");
+  assert.match(summary.ferrumRemoteCmd, /--vast-id 98765 --poweroff/);
+  assert.equal(MCP_TOOLS.length, 6);
+});

@@ -59,6 +59,9 @@ switch (sub) {
   case "remote":
     runShell("remote_build.sh", rest);
     break;
+  case "vast":
+    runNode("vast-cloud.mjs", rest);
+    break;
   case "warm-target": {
     const [src, dst, mode] = rest;
     if (!src || !dst) {
@@ -83,7 +86,8 @@ Usage:
   ferrum env                                 Check OS linker, RAM, disk, and macOS XProtect / Windows Dev Drive traps
   ferrum audit [--full]                      Audit build parallelism, proc-macros, duplicate deps, and critical path
   ferrum fast <build|check|run> [args...]    Opt-in nightly fast lane (-Zthreads + Cranelift in target-fast/)
-  ferrum remote <ssh-host> [opts] -- <args>  Remote Linux VM burst build with --install-watchdog & --poweroff
+  ferrum remote <ssh-host> [opts] -- <args>  Remote Linux VM / Vast.ai burst build with --install-watchdog & --poweroff
+  ferrum vast <search|instances|create|stop|destroy|balance|--mcp>  Vast.ai Rust Cloud Orchestrator & MCP Server
   ferrum setup [--home <dir>] [--dry-run]    Install FERRUM skill into Claude Code, Codex CLI, and Antigravity
 `);
     process.exit(sub === "help" || sub === "--help" || sub === "-h" ? 0 : 1);

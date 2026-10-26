@@ -62,7 +62,7 @@ plan the two together.
 | Existing project builds slowly or low RAM (8–16 GB) | **Workflow B** → [build-performance.md](references/build-performance.md) (§12 Low-RAM) | `bash <skill>/scripts/build_audit.sh` · `scripts/cargo-fast.sh` |
 | TDD / test loop is slow | [fast-tdd.md](references/fast-tdd.md) | `cargo check -p <crate> --tests` · `cargo nextest run -p <crate>` |
 | Architecture review or enforcing the 9 Golden Laws | **Workflow C** → [architecture.md §7](references/architecture.md), [golden-protocol.md §2](references/golden-protocol.md) | `node <skill>/scripts/check-rust-arch.mjs [cwd]` |
-| Rented Linux VMs / zero-waste idle VM protection | **Workflow D** → [remote-vm-builds.md](references/remote-vm-builds.md) (§7 Zero-Waste) | `scripts/remote_build.sh <host> --install-watchdog 15` / `--poweroff` |
+| Rented Linux VMs / Vast.ai MCP / zero-waste idle protection | **Workflow D** → [remote-vm-builds.md](references/remote-vm-builds.md) (§7 Zero-Waste, §8 Vast.ai MCP) | `ferrum vast search` · `scripts/remote_build.sh <ssh-url> --vast-id <id> --poweroff` |
 | Brownfield rescue of an advanced legacy codebase | **Workflow E** → [brownfield-migration.md](references/brownfield-migration.md) | `node <skill>/scripts/check-rust-arch.mjs . --plan` / `--write-baseline` |
 | Multi-agent parallel waves (`codex_batch` 3-Beat) | **Workflow F** → [golden-protocol.md](references/golden-protocol.md) | `node <skill>/scripts/rust-add-crate.mjs <name>` (Beat 1) |
 | Cross-compiling (Mac→Win/Linux, Linux→Win/Mac) | [platforms.md §4, §8, §9](references/platforms.md) | `cargo xwin test --target x86_64-pc-windows-msvc` · `cargo zigbuild` |

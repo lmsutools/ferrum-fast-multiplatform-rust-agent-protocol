@@ -91,17 +91,26 @@ export function setupAllAgents({
   }));
 
   const agyPluginDir = path.join(homeDir, ".gemini", "config", "plugins", "ferrum-rust-suite");
+  const vastMcpScript = path.join(repoRoot, "scripts", "vast-cloud.mjs");
   const pluginManifest = {
     name: "ferrum-rust-suite",
     displayName: "FERRUM — Fast Multiplatform Rust Agent Protocol",
     version: "1.0.0",
-    description: "FERRUM (Flat-DAG, Edge-Isolated, Reflink-Warmed, Ratchet-Guarded, Unified-Deps, Multi-Agent): Golden Protocol for 100k-1M+ LOC Rust architecture, 9 Golden Laws static gate, brownfield Strangler-Fig ratchet, Sentry triage, and fast multiplatform builds.",
+    description: "FERRUM (Flat-DAG, Edge-Isolated, Reflink-Warmed, Ratchet-Guarded, Unified-Deps, Multi-Agent): Golden Protocol for 100k-1M+ LOC Rust architecture, 9 Golden Laws static gate, brownfield Strangler-Fig ratchet, Vast.ai MCP cloud burst, Sentry triage, and fast multiplatform builds.",
     logo: "assets/logo.svg",
     suggestedPrompts: [
       "Scaffold a multiplatform Rust workspace following the FERRUM protocol (Ship/Ready/Out tiers)",
       "Run FERRUM check-rust-arch --plan to X-ray this brownfield Rust codebase and freeze the ratchet",
-      "Audit Rust build parallelism, low-RAM settings, and OS linker speed traps",
+      "Search Vast.ai for a 32+ core high-CPU Rust build instance with 15-minute auto-stop watchdog",
     ],
+  };
+  const mcpConfig = {
+    mcpServers: {
+      "ferrum-vast-mcp": {
+        command: process.execPath,
+        args: [vastMcpScript, "--mcp"],
+      },
+    },
   };
 
   if (!dryRun) {
@@ -109,6 +118,7 @@ export function setupAllAgents({
     fs.mkdirSync(path.join(agyPluginDir, "skills"), { recursive: true });
     fs.writeFileSync(path.join(agyPluginDir, "plugin.json"), JSON.stringify(pluginManifest, null, 2) + "\n");
     fs.writeFileSync(path.join(agyPluginDir, "assets", "logo.svg"), LOGO_SVG);
+    fs.writeFileSync(path.join(agyPluginDir, "mcp_config.json"), JSON.stringify(mcpConfig, null, 2) + "\n");
     linkDirectory(rustSkillSource, path.join(agyPluginDir, "skills", "weedo-rust-dev-skill"), { platform, dryRun });
   }
 

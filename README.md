@@ -153,9 +153,11 @@ node bin/ferrum.mjs warm-target ./projects/acme ./worktrees/worker-1
 # 8. Closed-loop Sentry / BugSink / GlitchTip crash triage -> Cargo crate worktree payload
 node bin/ferrum.mjs sentry-triage --issue ./crash-event.json --cwd ./projects/acme
 
-# 9. Remote Linux VM burst build with 15-min dead-man's switch & pre-review auto-poweroff
-node bin/ferrum.mjs remote buildvm --install-watchdog 15
-node bin/ferrum.mjs remote buildvm --poweroff -- nextest run --workspace --profile ci
+# 9. Remote Linux VM / Vast.ai burst build with 15-min dead-man's switch & pre-review auto-poweroff
+node bin/ferrum.mjs vast search --min-cores 32 --min-ram 64 --max-dph 0.50
+node bin/ferrum.mjs vast create <OFFER_ID> --disk 40 --idle-mins 15
+node bin/ferrum.mjs remote ssh://root@ssh5.vast.ai:41892 --vast-id <INSTANCE_ID> --poweroff \
+  -- nextest run --workspace --profile ci
 ```
 
 ---

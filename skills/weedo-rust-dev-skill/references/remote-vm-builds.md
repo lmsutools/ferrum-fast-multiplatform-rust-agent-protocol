@@ -201,6 +201,66 @@ scripts/remote_build.sh buildvm --install-watchdog 15
   (AWS EC2 EBS-backed, GCP, Azure when deallocated; on Hetzner/DigitalOcean, pair with a
   tiny cloud-API destroy/snapshot hook if the provider bills powered-off instances).
 
+---
+
+## Step 8: Vast.ai On-Demand Instances & MCP Server Playbook (`ferrum-vast-mcp` / `vastai-mcp`)
+
+Vast.ai offers 32–128 core AMD EPYC / Threadripper machines (with optional GPUs for
+CUDA / WGPU / Candle / Burn workloads) at **\$0.12–\$0.45/hr**, controllable directly by
+AI agents via **Model Context Protocol (MCP)** servers.
+
+### 1. Three Critical Vast.ai Differences (Avoid These Traps!)
+1. **Vast.ai instances are Docker containers, NOT full kernel VMs:**
+   - Inside a Vast.ai container, `/sbin/poweroff` and `systemctl poweroff` **do not stop Vast.ai billing**.
+   - To stop billing, you **must** call the Vast.ai API (`PUT /api/v0/instances/$CONTAINER_ID/ {"state":"stopped"}` or `DELETE` to destroy).
+   - Both [`scripts/vast-cloud.mjs`](../scripts/vast-cloud.mjs) (`buildVastOnstartScript`) and [`scripts/remote_build.sh`](../scripts/remote_build.sh) (`--vast-id <id> --poweroff` / `--destroy` / `--install-watchdog`) handle this automatically via the Vast.ai REST API!
+2. **Don't Rent a \$1.50/hr GPU Attached to a Weak 4-Core CPU:**
+   - Standard Vast.ai searches sort by GPU TFLOPS. For Rust compilation, filter by:
+     - `cpu_cores_effective >= 32` (or `>= 64`)
+     - `cpu_ram >= 64` GB ($\ge 2\text{ GB}$ RAM per effective core so `rustc` + `lld` never OOM)
+     - `disk_bw >= 500` MB/s (fast NVMe for `target/`)
+     - `reliability >= 0.98`
+   - `ferrum vast search` (`vast_search_rust_offers` MCP tool) automatically filters for these constraints and ranks offers by **`Effective CPU Cores per Dollar`**.
+3. **Custom SSH Ports (`ssh://root@ssh5.vast.ai:41892`):**
+   - Vast.ai assigns a high port (`-p 41892`) per container. `scripts/remote_build.sh` natively accepts full `ssh://root@ssh5.vast.ai:41892` URLs or `--port <port>` and passes `-p` to both `ssh` and `rsync -e`.
+
+### 2. Using the Built-In `ferrum-vast-mcp` Server & Community MCP Servers
+FERRUM ships a zero-dependency Vast.ai MCP server (`scripts/vast-cloud.mjs --mcp`, auto-registered in Antigravity by `npm run setup`) and works alongside community MCP packages (`vastai-mcp` / `vast-mcp-server`).
+
+**Setup your API key once:**
+```bash
+export VAST_API_KEY="your-vast-api-key"
+# or persist for both CLI and MCP servers:
+echo "your-vast-api-key" > ~/.vast_api_key && chmod 600 ~/.vast_api_key
+```
+
+**Built-in MCP Tools (`ferrum-vast-mcp`) & CLI equivalents (`node bin/ferrum.mjs vast ...`):**
+
+| MCP Tool Name | CLI Command | When the Agent Calls It |
+| :--- | :--- | :--- |
+| `vast_balance` | `ferrum vast balance` | Before starting a wave—checks credit balance and current hourly burn rate (`$/hr`). |
+| `vast_search_rust_offers` | `ferrum vast search --min-cores 32 --min-ram 64` | Finds the highest `coresPerDollar` EPYC/Threadripper offers (add `--gpu RTX_4090` if testing CUDA/WGPU crates). |
+| `vast_create_rust_instance` | `ferrum vast create <offerId> --idle-mins 15` | Launches `rust:latest` (or CUDA image), installs `lld`/`mold`/`rsync`, and starts the 15-min Vast.ai API self-stop watchdog. |
+| `vast_list_instances` | `ferrum vast instances` | Returns active instances, their `ssh://root@sshX.vast.ai:PORT` URL, and the exact `ferrum remote` command to run. |
+| `vast_stop_instance` | `ferrum vast stop <instanceId>` | Stops compute billing immediately right before the local LLM begins reviewing build/test output. |
+| `vast_destroy_instance` | `ferrum vast destroy <instanceId>` | Destroys the instance completely at the end of a sprint so storage billing also drops to \$0. |
+
+### 3. End-to-End Burst Workflow on Vast.ai
+```bash
+# 1. Find the best 32+ core Rust build offer on Vast.ai:
+node bin/ferrum.mjs vast search --min-cores 32 --min-ram 64 --max-dph 0.50
+
+# 2. Launch the offer (auto-installs lld/mold + 15-minute Vast.ai API idle watchdog):
+node bin/ferrum.mjs vast create <OFFER_ID> --disk 40 --idle-mins 15
+
+# 3. Get the SSH URL and ready-to-run command:
+node bin/ferrum.mjs vast instances
+
+# 4. Run the 32-core burst build/test, fetch artifacts, and immediately STOP Vast.ai billing before LLM review:
+node bin/ferrum.mjs remote ssh://root@ssh5.vast.ai:41892 --vast-id <INSTANCE_ID> --poweroff \
+  -- nextest run --workspace --profile ci
+```
+
 ## Decision checklist (copy into the project plan)
 
 - [ ] `max useful cores` measured: ____
