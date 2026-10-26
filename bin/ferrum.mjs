@@ -62,6 +62,10 @@ switch (sub) {
   case "vast":
     runNode("vast-cloud.mjs", rest);
     break;
+  case "progress":
+  case "plan":
+    runNode("progress.mjs", rest);
+    break;
   case "warm-target": {
     const [src, dst, mode] = rest;
     if (!src || !dst) {
@@ -88,6 +92,7 @@ Usage:
   ferrum fast <build|check|run> [args...]    Opt-in nightly fast lane (-Zthreads + Cranelift in target-fast/)
   ferrum remote <ssh-host> [opts] -- <args>  Remote Linux VM / Vast.ai burst build with --install-watchdog & --poweroff
   ferrum vast <search|instances|create|stop|destroy|balance|--mcp>  Vast.ai Rust Cloud Orchestrator & MCP Server
+  ferrum progress [cwd] [--init|--record|--set <id>=<pct>]  Weighted project progress & live codebase sensor engine
   ferrum setup [--home <dir>] [--dry-run]    Install FERRUM skill into Claude Code, Codex CLI, and Antigravity
 `);
     process.exit(sub === "help" || sub === "--help" || sub === "-h" ? 0 : 1);

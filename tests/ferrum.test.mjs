@@ -319,3 +319,61 @@ test("Vast.ai Cloud Orchestrator & MCP Server ranks offers by Effective CPU Core
   assert.match(summary.ferrumRemoteCmd, /--vast-id 98765 --poweroff/);
   assert.equal(MCP_TOOLS.length, 6);
 });
+
+test("Weighted Progress Engine evaluates live codebase sensors, turn deltas, and universal default plans", async () => {
+  const {
+    buildDefaultPlan,
+    evaluatePlan,
+    updatePlanItem,
+    formatMarkdownProgress,
+  } = await import("../scripts/progress.mjs");
+
+  const ws = tmp("progress-ws");
+  fs.mkdirSync(path.join(ws, "crates/ui/src"), { recursive: true });
+  fs.writeFileSync(
+    path.join(ws, "Cargo.toml"),
+    `[workspace]\nmembers = ["crates/ui"]\nresolver = "3"\n\n[workspace.lints.rust]\nunsafe_code = "warn"\n\n[profile.dev]\ndebug = "line-tables-only"\n\n[profile.dev.package."*"]\ndebug = false\n`,
+  );
+  fs.writeFileSync(
+    path.join(ws, "crates/ui/Cargo.toml"),
+    `[package]\nname = "ui"\nversion = "0.1.0"\nedition = "2024"\n\n[lints]\nworkspace = true\n`,
+  );
+  fs.writeFileSync(
+    path.join(ws, "crates/ui/src/lib.rs"),
+    `pub fn draw() {\n  // app.session.touch();\n  let _ = "app.session.one";\n  let _ = "app.session.two";\n}\n#[cfg(test)]\nmod tests {\n  fn t() { let _ = "app.session.ignored_in_test"; }\n}\n`,
+  );
+
+  const plan = buildDefaultPlan(ws);
+  assert.equal(plan.pillars.length, 4);
+
+  // Add a live pattern_burndown sensor item starting at 4 occurrences (2 remain -> 50% done)
+  plan.baselinePct = 50;
+  plan.lastTurnPct = 60;
+  plan.pillars[3].items = [
+    {
+      id: "P4.1",
+      title: "Migrate .session. calls out of UI",
+      weight: 30,
+      status: "in_progress",
+      progress: 0,
+      sensor: {
+        type: "pattern_burndown",
+        dir: "crates/ui/src",
+        pattern: "app\\.session\\.",
+        startCount: 4,
+        targetCount: 0,
+      },
+    },
+  ];
+
+  const report1 = evaluatePlan(ws, plan);
+  assert.equal(report1.overallPct, 85);
+  assert.equal(report1.turnDeltaPct, 25);
+  assert.equal(report1.baselineDeltaPct, 35);
+
+  updatePlanItem(plan, "P4.1=completed");
+  const report2 = evaluatePlan(ws, plan);
+  assert.equal(report2.overallPct, 100);
+  const md = formatMarkdownProgress(report2);
+  assert.match(md, /100\.00%/);
+});

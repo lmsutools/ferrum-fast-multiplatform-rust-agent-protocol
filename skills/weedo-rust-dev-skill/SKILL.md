@@ -178,6 +178,26 @@ When dispatching parallel AI workers on a Rust workspace, follow
    `no_unbounded_channels`, and `no_unredacted_secrets`), and run `cargo nextest` +
    targeted `cargo mutants -p <ws>-domain`.
 
+## Workflow G: Weighted Project Progress & Mandatory Turn-End Progress Footer (`ferrum progress`)
+
+Every greenfield or brownfield Rust project tracked by FERRUM maintains a deterministic
+`.ferrum-plan.json` weighted to `100.00` points across its pillars, with live codebase
+sensors (`pattern_burndown`, `ferrum_law_burndown`, `file_exists`) that automatically
+advance completion percentages as code changes land:
+1. **Initialize or Inspect Progress (`ferrum progress`):**
+   - For any new or existing Rust repo without `.ferrum-plan.json`, run
+     `node bin/ferrum.mjs progress <repo-dir> --init` to auto-generate a 100-point
+     weighted plan calibrated to the workspace's current FERRUM 9-Law violations,
+     profile configuration, and feature milestones.
+   - Update manual milestone completion via
+     `node bin/ferrum.mjs progress <repo-dir> --set <itemId>=<pct|completed>`.
+2. **Mandatory Turn-End Progress Footer (Every Chat Turn):**
+   - At the end of **every chat turn** on a tracked Rust project, run
+     `node bin/ferrum.mjs progress <repo-dir> --record` and include the
+     **FERRUM Weighted Progress** block (`[████░░] XX.XX%`, turn delta `+X.XX%`,
+     baseline delta, and per-pillar table) at the bottom of your response so the owner
+     always sees exact, source-verified percentage progress.
+
 ---
 
 ## Non-negotiable defaults (apply silently unless the owner objects)
