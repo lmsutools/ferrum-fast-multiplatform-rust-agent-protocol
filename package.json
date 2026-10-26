@@ -1,0 +1,30 @@
+{
+  "name": "ferrum-fast-multiplatform-rust-agent-protocol",
+  "version": "1.0.0",
+  "description": "FERRUM — Flat-DAG, Edge-Isolated, Reflink-Warmed, Ratchet-Guarded, Unified-Deps, Multi-Agent: Golden Protocol & Skill Suite for Fast Multiplatform Rust Architecture across Antigravity, Claude Code & OpenAI Codex.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "ferrum": "./bin/ferrum.mjs"
+  },
+  "scripts": {
+    "test": "node --import ./tests/setup-realpath-tmp.mjs --test tests/ferrum.test.mjs",
+    "setup": "node scripts/setup-all.mjs",
+    "check": "node scripts/check-rust-arch.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "rust",
+    "cargo",
+    "multi-agent",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "architecture",
+    "cross-compilation",
+    "sentry",
+    "nextest"
+  ]
+}
