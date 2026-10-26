@@ -145,13 +145,25 @@ export function buildVastOnstartScript({ idleMins = 15, autoDestroy = false } = 
   return `#!/usr/bin/env bash
 set -u
 export DEBIAN_FRONTEND=noninteractive
+export PATH="/usr/local/cargo/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+if [ -d /usr/local/cargo/bin ]; then
+  ln -sf /usr/local/cargo/bin/* /usr/local/bin/ 2>/dev/null || true
+fi
+if ! command -v sshd >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  apt-get update -qq && apt-get install -y -qq openssh-server >/dev/null 2>&1 || true
+  mkdir -p /run/sshd
+  ssh-keygen -A >/dev/null 2>&1 || true
+  /usr/sbin/sshd || true
+fi
 if command -v apt-get >/dev/null 2>&1; then
-  apt-get update -qq && apt-get install -y -qq build-essential pkg-config libssl-dev clang lld mold rsync zstd curl git jq procps >/dev/null 2>&1 || true
+  apt-get update -qq && apt-get install -y -qq build-essential pkg-config libssl-dev clang llvm lld mold rsync zstd curl git jq procps >/dev/null 2>&1 || true
 fi
 if ! command -v cargo >/dev/null 2>&1; then
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal -c rustfmt,clippy
 fi
-source "$HOME/.cargo/env" 2>/dev/null || true
+if [ -d "$HOME/.cargo/bin" ]; then
+  ln -sf "$HOME/.cargo/bin/"* /usr/local/bin/ 2>/dev/null || true
+fi
 
 cat >/usr/local/bin/rust-vm-watchdog.sh <<'WATCHDOG_EOF'
 #!/usr/bin/env bash
@@ -186,9 +198,14 @@ nohup /usr/local/bin/rust-vm-watchdog.sh >/var/log/rust-vm-watchdog.log 2>&1 &
 /** Format a Vast.ai instance JSON record into a concise developer/agent summary. */
 export function formatInstanceSummary(inst) {
   const id = inst.id;
-  const host = inst.ssh_host || inst.public_ipaddr || "";
-  const port = inst.ssh_port || (inst.ports?.["22/tcp"]?.[0]?.HostPort) || 22;
+  const directIp = inst.public_ipaddr || "";
+  const directPort = inst.ports?.["22/tcp"]?.[0]?.HostPort || "";
+  const proxyHost = inst.ssh_host || "";
+  const proxyPort = inst.ssh_port || 22;
+  const host = directIp && directPort ? directIp : proxyHost || directIp;
+  const port = directIp && directPort ? directPort : proxyPort;
   const sshUrl = host ? `ssh://root@${host}:${port}` : null;
+  const sshProxyUrl = proxyHost ? `ssh://root@${proxyHost}:${proxyPort}` : null;
   return {
     id,
     status: inst.actual_status || inst.cur_state || inst.intended_status || "unknown",
@@ -197,6 +214,7 @@ export function formatInstanceSummary(inst) {
     gpuName: inst.gpu_name || "CPU",
     dphTotal: Math.round(Number(inst.dph_total || 0) * 1000) / 1000,
     sshUrl,
+    sshProxyUrl,
     ferrumRemoteCmd: sshUrl
       ? `node bin/ferrum.mjs remote ${sshUrl} --vast-id ${id} --poweroff -- nextest run --workspace`
       : null,
@@ -210,7 +228,11 @@ async function vastFetch(endpoint, { method = "GET", body, apiKey } = {}) {
       "Missing Vast.ai API key. Set VAST_API_KEY in your environment or save it to ~/.vast_api_key",
     );
   }
-  const url = `${VAST_API_BASE}${endpoint}`;
+  const url = endpoint.startsWith("http")
+    ? endpoint
+    : endpoint.startsWith("/api/")
+      ? `https://console.vast.ai${endpoint}`
+      : `${VAST_API_BASE}${endpoint}`;
   const res = await fetch(url, {
     method,
     headers: {
@@ -253,7 +275,7 @@ export async function searchVastRustOffers(options = {}) {
 }
 
 export async function listVastInstances() {
-  const data = await vastFetch("/instances/?owner=me");
+  const data = await vastFetch("/api/v1/instances/?owner=me");
   const list = Array.isArray(data?.instances) ? data.instances : Array.isArray(data) ? data : [];
   const formatted = list.map(formatInstanceSummary);
   const totalBurnDph = Math.round(
@@ -266,7 +288,7 @@ export async function listVastInstances() {
 
 export async function createVastRustInstance(
   offerId,
-  { diskGb = 40, image = "rust:latest", idleMins = 15, autoDestroy = false } = {},
+  { diskGb = 40, image = "ubuntu:24.04", idleMins = 15, autoDestroy = false } = {},
 ) {
   if (!offerId) throw new Error("offerId is required to create a Vast.ai instance");
   const apiKey = resolveVastApiKey();
@@ -345,7 +367,7 @@ export const MCP_TOOLS = [
       properties: {
         offerId: { type: "number", description: "Vast.ai offer ID from vast_search_rust_offers" },
         diskGb: { type: "number", default: 40 },
-        image: { type: "string", default: "rust:latest" },
+        image: { type: "string", default: "ubuntu:24.04" },
         idleMins: { type: "number", default: 15, description: "Minutes of zero cargo/rustc activity before auto-stopping billing" },
         autoDestroy: { type: "boolean", default: false, description: "If true, destroys instance on idle instead of stopping" },
       },
@@ -457,7 +479,7 @@ async function main(argv = process.argv.slice(2)) {
       process.stdout.write(JSON.stringify(await getVastBalance(), null, 2) + "\n");
     } else if (cmd === "create") {
       const offerId = rest[0];
-      let diskGb = 40, image = "rust:latest", idleMins = 15, autoDestroy = false;
+      let diskGb = 40, image = "ubuntu:24.04", idleMins = 15, autoDestroy = false;
       for (let i = 1; i < rest.length; i++) {
         if (rest[i] === "--disk") diskGb = Number(rest[++i]);
         else if (rest[i] === "--image") image = rest[++i];
