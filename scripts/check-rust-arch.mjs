@@ -81,13 +81,20 @@ function parseCrateManifest(manifestPath) {
 
 const violationKey = v => `${v.rule}::${v.file}`;
 
-/** Audit a Rust workspace at `cwd` and return `{ ok, violations, newViolations, baselinedCount, fixedCount }`. */
-export function checkRustArchitecture(cwd = process.cwd(), { ignoreBaseline = false } = {}) {
+/** Audit a Rust workspace at `cwd` and return `{ ok, violations, newViolations, baselinedCount, fixedCount, vendoredCratesSkipped }`. */
+export function checkRustArchitecture(cwd = process.cwd(), { ignoreBaseline = false, includeVendored = false } = {}) {
   const rootManifest = path.join(cwd, "Cargo.toml");
   if (!fs.existsSync(rootManifest)) return { ok: true, violations: [], newViolations: [], baselinedCount: 0, fixedCount: 0 };
   const rootRaw = fs.readFileSync(rootManifest, "utf8");
   const rel = p => path.relative(cwd, p).replaceAll("\\", "/");
   const violations = [];
+
+  // Auto-detect vendored upstream crate prefixes (e.g. `[workspace.metadata.filmcraft-upstream]`)
+  const vendoredPrefixes = [];
+  for (const m of rootRaw.matchAll(/\[workspace\.metadata\.([A-Za-z0-9_-]+)-upstream\]/g)) {
+    vendoredPrefixes.push(`${m[1]}-`);
+  }
+  const isVendoredCrate = name => !includeVendored && vendoredPrefixes.some(pref => name.startsWith(pref));
 
   // Single-crate monolith detection (not a [workspace] yet)
   if (!/\[workspace\]/.test(rootRaw)) {
@@ -109,13 +116,38 @@ export function checkRustArchitecture(cwd = process.cwd(), { ignoreBaseline = fa
     return applyBaseline(cwd, violations, ignoreBaseline);
   }
 
+  // Check root Cargo.toml for slow profile traps (e.g. [profile.release] codegen-units = 1 or [profile.dev] missing debug = "line-tables-only")
+  const releaseBlock = rootRaw.match(/\[profile\.release\]([\s\S]*?)(?=\n\[|$)/);
+  if (releaseBlock && /^\s*codegen-units\s*=\s*1\b/m.test(releaseBlock[1])) {
+    violations.push({
+      rule: "arch::fast_compile_profiles",
+      file: "Cargo.toml",
+      line: 1,
+      column: 1,
+      message: "[profile.release] sets 'codegen-units = 1' which serializes LLVM codegen on 1 thread; keep 'codegen-units = 16' in release and move 'codegen-units = 1' to [profile.dist]",
+    });
+  }
+  const devBlock = rootRaw.match(/\[profile\.dev\]([\s\S]*?)(?=\n\[|$)/);
+  if (devBlock && /^\s*opt-level\s*=\s*[123]\b/m.test(devBlock[1]) && !/^\s*debug\s*=/m.test(devBlock[1])) {
+    violations.push({
+      rule: "arch::fast_compile_profiles",
+      file: "Cargo.toml",
+      line: 1,
+      column: 1,
+      message: "[profile.dev] enables optimization without setting 'debug = \"line-tables-only\"' (or false), forcing full DWARF/PDB debuginfo generation; add 'debug = \"line-tables-only\"' and '[profile.dev.package.\"*\"] debug = false'",
+    });
+  }
+
   const rootHasWorkspaceLints = /\[workspace\.lints(?:\.|\])/.test(rootRaw);
   const manifests = walkFiles(cwd, f => path.basename(f) === "Cargo.toml" && path.resolve(f) !== path.resolve(rootManifest));
-  const crates = manifests.map(parseCrateManifest).filter(c => c.name);
+  const allCrates = manifests.map(parseCrateManifest).filter(c => c.name);
+  const crates = allCrates.filter(c => !isVendoredCrate(c.name));
 
   for (const crate of crates) {
     const isPlatform = crate.name === "platform" || crate.name.endsWith("-platform") || rel(crate.dir) === "crates/platform";
-    const isDomain = crate.name === "domain" || crate.name.endsWith("-domain") || rel(crate.dir) === "crates/domain";
+    const isDomain =
+      crate.name === "domain" || crate.name.endsWith("-domain") || rel(crate.dir) === "crates/domain" ||
+      crate.name === "model" || crate.name.endsWith("-model") || rel(crate.dir) === "crates/model";
     const isTelemetry = crate.name === "telemetry" || crate.name.endsWith("-telemetry") || rel(crate.dir) === "crates/telemetry";
 
     // Law 1: No per-crate feature overrides on workspace dependencies
@@ -146,7 +178,10 @@ export function checkRustArchitecture(cwd = process.cwd(), { ignoreBaseline = fa
     }
 
     // Law 3 & Laws 7-9: Source-level architectural & semantic guardrails (production code only, before #[cfg(test)])
-    const srcFiles = walkFiles(path.join(crate.dir, "src"), f => f.endsWith(".rs"));
+    const srcFiles = walkFiles(
+      path.join(crate.dir, "src"),
+      f => f.endsWith(".rs") && !/(?:^|[\\/])(?:tests\.rs|.*_tests\.rs)$/.test(f),
+    );
     for (const file of srcFiles) {
       const text = fs.readFileSync(file, "utf8");
       const rawLines = text.split(/\r?\n/);
@@ -252,6 +287,8 @@ export function checkRustArchitecture(cwd = process.cwd(), { ignoreBaseline = fa
     const r = rel(c.dir);
     return (
       c.name === "domain" || c.name.endsWith("-domain") || r === "crates/domain" ||
+      c.name === "model" || c.name.endsWith("-model") || r === "crates/model" ||
+      c.name === "core" || c.name.endsWith("-core") || r === "crates/core" ||
       c.name === "app" || c.name.endsWith("-app") || r === "crates/app" ||
       c.name === "types" || c.name.endsWith("-types") || r === "crates/types" ||
       c.name === "test-support" || c.name.endsWith("-test-support") || r === "crates/test-support"
