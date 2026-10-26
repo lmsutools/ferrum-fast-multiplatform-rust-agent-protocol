@@ -233,14 +233,20 @@ async function vastFetch(endpoint, { method = "GET", body, apiKey } = {}) {
 }
 
 export async function searchVastRustOffers(options = {}) {
-  // Use CLI if installed and no API key needed, or direct REST API
+  const minCores = Number(options.minCores || 16);
+  const minRamGb = Number(options.minRamGb || 32);
+  const minDiskGb = Number(options.minDiskGb || 60);
   const data = await vastFetch("/bundles/?q=" + encodeURIComponent(JSON.stringify({
     verified: { eq: true },
     external: { eq: false },
     rentable: { eq: true },
     rented: { eq: false },
+    cpu_cores_effective: { gte: minCores },
+    cpu_ram: { gte: minRamGb * 1000 },
+    disk_space: { gte: minDiskGb },
     order: [["dph_total", "asc"]],
     type: "on-demand",
+    limit: 100,
   })));
   const offers = Array.isArray(data?.offers) ? data.offers : Array.isArray(data) ? data : [];
   return rankRustOffers(offers, options);
