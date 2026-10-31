@@ -67,6 +67,7 @@ plan the two together.
 | Multi-agent parallel waves (`codex_batch` 3-Beat) | **Workflow F** → [golden-protocol.md](references/golden-protocol.md) | `node <skill>/scripts/rust-add-crate.mjs <name>` (Beat 1) |
 | Cross-compiling (Mac→Win/Linux, Linux→Win/Mac) | [platforms.md §4, §8, §9](references/platforms.md) | `cargo xwin test --target x86_64-pc-windows-msvc` · `cargo zigbuild` |
 | Telemetry, Sentry, BugSink, or crash triage | [telemetry-and-sentry.md](references/telemetry-and-sentry.md) | `node <plugin>/scripts/sentry-triage.mjs --issue <event.json>` |
+| Hosted CI minutes / GitHub Actions bills / blocked CI jobs / cutting CI cost | [ci-cost-control.md](references/ci-cost-control.md) | `ferrum vast search` burst · `concurrency` + `paths-ignore` · OS matrix on tags only |
 | CI, lints, supply chain, release, modern Rust 2024 | [tooling-and-ci.md](references/tooling-and-ci.md), [modern-rust.md](references/modern-rust.md) | `cargo deny check` · `cargo shear --fix` · `cargo mutants -p <domain>` |
 
 ---
